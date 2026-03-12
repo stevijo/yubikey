@@ -49,6 +49,38 @@ func CloseAll() {
 	}
 }
 
+type handleHolder struct {
+	handle uintptr
+}
+
+type version struct {
+	major byte
+	minor byte
+	patch byte
+}
+
+func setFieldValue[T any](yk *piv.YubiKey, fieldName string, t T) {
+	r := reflect.ValueOf(yk).Elem()
+
+	field := r.FieldByName(fieldName)
+	if field == (reflect.Value{}) {
+		return
+	}
+
+	fieldType := field.Type()
+
+	// Set the field in YubiKey using the field index
+	reflect.NewAt(
+		fieldType,
+		unsafe.Pointer(field.UnsafeAddr()),
+	).Elem().Set(
+		reflect.NewAt(
+			fieldType,
+			unsafe.Pointer(&t),
+		).Elem(),
+	)
+}
+
 // Open opens a YubiKey with the specified share mode.
 // This allows multiple processes to access the YubiKey concurrently when using ShareShared.
 // Currently, piv.Open is used internally, which opens in SHARE_SHARED mode by default.
@@ -98,76 +130,25 @@ func Open(reader string, mode ShareMode) (*piv.YubiKey, error) {
 
 	// Create YubiKey and fill fields via reflection
 	yk := &piv.YubiKey{}
-	ykValue := reflect.ValueOf(yk).Elem()
-	ykType := ykValue.Type()
-
-	// Helper to set a pointer field with a struct containing a handle
-	setHandleField := func(fieldName string, handle uint64) {
-		field, ok := ykType.FieldByName(fieldName)
-		if !ok {
-			return
-		}
-		// Create new struct for the handle
-		elemType := field.Type.Elem() // e.g., scContext from *scContext
-		elemVal := reflect.New(elemType)
-
-		handleField := elemVal.Elem().Field(0)
-		// Set first field (the handle)
-		reflect.NewAt(
-			handleField.Type(),
-			unsafe.Pointer(handleField.UnsafeAddr()),
-		).Elem().SetInt(int64(handle))
-		// Set the field in YubiKey using the field index
-		reflect.NewAt(
-			ykValue.Field(field.Index[0]).Type(),
-			unsafe.Pointer(ykValue.Field(field.Index[0]).UnsafeAddr()),
-		).Elem().Set(elemVal)
-	}
 
 	// Fill ctx, h, and tx fields
-	setHandleField("ctx", ctxHandle)
-	setHandleField("h", cardHandle)
-	setHandleField("tx", cardHandle)
+	setFieldValue(yk, "ctx", &handleHolder{
+		uintptr(ctxHandle),
+	})
+	setFieldValue(yk, "h", &handleHolder{
+		uintptr(cardHandle),
+	})
+	setFieldValue(yk, "tx", &handleHolder{
+		uintptr(cardHandle),
+	})
 
-	// Set rand field
-	if randField, ok := ykType.FieldByName("rand"); ok {
-		reflect.NewAt(
-			ykValue.Field(randField.Index[0]).Type(),
-			unsafe.Pointer(ykValue.Field(randField.Index[0]).UnsafeAddr()),
-		).Elem().Set(reflect.ValueOf(rand.Reader))
-	}
+	setFieldValue(yk, "rand", rand.Reader)
 
-	// Set version field (YubiKey 5.7.3)
-	if versionField, ok := ykType.FieldByName("version"); ok {
-		versionType := versionField.Type.Elem()
-		versionVal := reflect.New(versionType)
-
-		// Set Major field
-		majorField := versionVal.Elem().Field(0)
-		reflect.NewAt(
-			majorField.Type(),
-			unsafe.Pointer(majorField.UnsafeAddr()),
-		).Elem().SetUint(uint64(versionBytes[0]))
-
-		// Set Minor field
-		minorField := versionVal.Elem().Field(1)
-		reflect.NewAt(
-			minorField.Type(),
-			unsafe.Pointer(minorField.UnsafeAddr()),
-		).Elem().SetUint(uint64(versionBytes[1]))
-
-		// Set Patch field
-		patchField := versionVal.Elem().Field(2)
-		reflect.NewAt(
-			patchField.Type(),
-			unsafe.Pointer(patchField.UnsafeAddr()),
-		).Elem().SetUint(uint64(versionBytes[2]))
-
-		reflect.NewAt(
-			ykValue.Field(versionField.Index[0]).Type(),
-			unsafe.Pointer(ykValue.Field(versionField.Index[0]).UnsafeAddr()),
-		).Elem().Set(versionVal)
-	}
+	setFieldValue(yk, "version", &version{
+		major: versionBytes[0],
+		minor: versionBytes[1],
+		patch: versionBytes[2],
+	})
 
 	// Cache the YubiKey
 	_ = cache(yk)
