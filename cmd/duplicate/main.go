@@ -108,7 +108,7 @@ func main() {
 	}
 
 	// Import x25519 key
-	err = yubikey.ImportX25519Key(yk, pin, x25519Slot, x25519Key, piv.PINPolicyOnce, piv.TouchPolicyAlways)
+	err = yubikey.ImportX25519Key(yk, pin, x25519Slot, x25519Key, piv.PINPolicyOnce, piv.TouchPolicyCached)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: Failed to import x25519 key: %v\n", err)
 		os.Exit(1)
