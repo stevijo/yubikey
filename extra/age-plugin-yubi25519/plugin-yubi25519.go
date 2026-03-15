@@ -94,7 +94,7 @@ func main() {
 		})
 	})
 	p.HandleIdentityAsRecipient(func(data []byte) (age.Recipient, error) {
-		if len(data) != 5 {
+		if len(data) != 6 {
 			return nil, errors.New("incorrect payload")
 		}
 		serial := binary.BigEndian.Uint32(data[:4])
@@ -103,8 +103,6 @@ func main() {
 		if err != nil {
 			return nil, err
 		}
-
-		yk.Close()
 
 		retiredSlot, ok := piv.RetiredKeyManagementSlot(uint32(data[4]))
 		if !ok {
